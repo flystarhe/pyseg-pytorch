@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+
 from pyseg.losses.simple_pool import create_mask
 from pyseg.models.backbone.resnet import resnet_fpn_backbone
 

@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import torch.nn.functional as F
 
 
 def _splits(a, b, parts):
@@ -8,6 +9,7 @@ def _splits(a, b, parts):
 
 
 def _points(feat, topk, x1, y1, x2, y2):
+    # feat (Tensor[H, W]): type
     _y_pairs = _splits(y1, y2, topk)
     _x_pairs = _splits(x1, x2, topk)
 
@@ -24,40 +26,46 @@ def _points(feat, topk, x1, y1, x2, y2):
     return [points[i] for i in np.argsort(scores)[::-1][:topk]]
 
 
-def _make_target(topk, feats, boxes, labels, factor):
-    # feats (Tensor[*, H, W])： 0 is bg, [1, C] with C classes
-    # labels (List[int]): where each value is `1 <= labels[i] <= C`
-    inds = labels
-    if feats.size(0) == 1:
-        inds = [0 for _ in labels]
+def _balance_target(target, weight):
+    # target, weight (Tensor[H, W]): type
+    _, w = target.size()
+    negative_mask = target.eq(0)
+    n_positive = target.gt(0).sum().item()
 
-    target = torch.zeros_like(feats[0], dtype=torch.long)
-
-    feats = feats.softmax(dim=0)
-    for (x1, y1, x2, y2), ind in zip(boxes, inds):
-        x1 = int(np.floor(x1 * factor))
-        y1 = int(np.floor(y1 * factor))
-        x2 = int(np.ceil(x2 * factor))
-        y2 = int(np.ceil(y2 * factor))
-
-        x0, y0 = max(0, x1 - 1), max(0, y1 - 1)
-        target[y0:y2 + 1, x0:x2 + 1] = -1
-
-        for cy, cx in _points(feats[ind], topk, x1, y1, x2, y2):
-            target[cy, cx] = ind
+    n_top_max = min(w, n_positive * 2)
+    if negative_mask.sum().item() > n_top_max:
+        probs, _ = weight[negative_mask].sort(descending=True)
+        target[negative_mask * weight.lt(probs[n_top_max])] = -100
 
     return target
 
 
-def _balance_target(targets):
-    # List[Tensor[H, W]] or Tensor[N, H, W]
-    if isinstance(targets, list):
-        targets = torch.stack(targets, 0)
+def _make_target(s, topk, feats, boxes, labels=None, balance=False):
+    # feats (Tensor[K, H, W])： `0` means `_BG`, the C categories in `[1, K-1]`
+    # labels (List[int]): where each value is `1 <= labels[i] <= C`
+    # notes: assume `cross_entropy(ignore_index=-100)`
+    if labels is None:
+        labels = [1 for _ in boxes]
 
-    negative_mask = targets.eq(0)
-    n_positive = targets.gt(0).sum()
-    if negative_mask.sum() > n_positive:
-        probs = targets[negative_mask].sort(descending=True)[0]
-        targets[negative_mask * targets.lt(probs[n_positive])] = -1
+    _, h, w = feats.size()
+    feats = F.softmax(feats, dim=0)
+    masks = torch.zeros_like(feats, dtype=torch.uint8)
+    for (x1, y1, x2, y2), i in zip(boxes, labels):
+        x1 = int(np.floor(x1 * s))
+        y1 = int(np.floor(y1 * s))
+        x2 = int(np.ceil(x2 * s))
+        y2 = int(np.ceil(y2 * s))
 
-    return targets
+        masks[i, y1:y2, x1:x2] = 2
+        x2, y2 = min(w, x2), min(h, y2)
+        for cy, cx in _points(feats[i], topk, x1, y1, x2, y2):
+            masks[i, cy, cx] = 1
+
+    target = masks.argmax(0)
+    target[masks.sum(0) < 1] = 0
+    target[masks.sum(0) > 1] = -100
+
+    if balance:
+        target = _balance_target(target, feats[0])
+
+    return target

@@ -2,15 +2,29 @@ import albumentations as A
 import cv2 as cv
 import numpy as np
 import os
-
 from collections import defaultdict
-from pyseg.utils.io import load_json
 from torch.utils.data import Dataset
 from torchvision.transforms import functional as F
 
 
-class Toy(Dataset):
-    """COCO format."""
+from pyseg.utils.io import load_json
+
+
+class ToyDataset(Dataset):
+    """COCO format.
+
+    DATA_ROOT
+    ├── annotations
+    │   ├── test.json
+    │   ├── train.json
+    │   └── val.json
+    ├── coco.json
+    └── images
+        ├── CODE1/
+        ├── CODE2/
+        ├── ...
+        └── CODEn/
+    """
 
     def __init__(self, data_path, split):
         splits = ["train", "test", "val"]
@@ -24,7 +38,8 @@ class Toy(Dataset):
         self.create_index()
 
         self.transform = A.Compose([
-            A.RandomCrop(height=800, width=800, p=1.0),
+            A.SmallestMaxSize(max_size=512, p=1.0),
+            A.RandomCrop(height=256, width=256, p=1.0),
             A.RandomBrightnessContrast(p=0.2),
             A.HorizontalFlip(p=0.5),
         ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=["labels"]))
@@ -36,8 +51,8 @@ class Toy(Dataset):
         coco = load_json(self._ann_file)
 
         cats = coco["categories"]
-        classes = [cat["name"] for cat in cats]
-        cat2label = {cat["id"]: i for i, cat in enumerate(cats)}
+        classes = ["_BG"] + [cat["name"] for cat in cats]
+        cat2label = {cat["id"]: i for i, cat in enumerate(cats, 1)}
 
         imgs = {img["id"]: img["file_name"] for img in coco["images"]}
 
@@ -76,9 +91,6 @@ class Toy(Dataset):
 
         image = F.to_tensor(image)
         image = F.normalize(image, mean=self.mean, std=self.std, inplace=True)
-
-        bboxes = np.array(bboxes, dtype=np.float32)
-        labels = np.array(labels, dtype=np.int64)
         target = dict(id=img_id, filename=filename, bboxes=bboxes, labels=labels)
         return image, target
 

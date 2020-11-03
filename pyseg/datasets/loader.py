@@ -1,8 +1,10 @@
 import os
 import torch
-from pyseg.datasets.toy import Toy
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler
+
+
+from pyseg.datasets.toy import Toy
 
 
 # Supported datasets

@@ -9,6 +9,12 @@ def multi_apply(func, *args, **kwargs):
     return tuple(map(list, zip(*map_results)))
 
 
+def collate_fn(batch):
+    images, targets = list(zip(*batch))
+    images = torch.stack(images, 0)
+    return images, targets
+
+
 def seg_collate(batch):
     elem = batch[0]
 
@@ -18,9 +24,3 @@ def seg_collate(batch):
         return [seg_collate(samples) for samples in zip(*batch)]
     else:
         return default_collate(batch)
-
-
-def toy_collate(batch):
-    images, targets = list(zip(*batch))
-    images = torch.stack(images, 0)
-    return images, targets
