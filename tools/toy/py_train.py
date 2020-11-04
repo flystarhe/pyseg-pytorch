@@ -3,16 +3,15 @@ import os
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.data
 
 
 import apis
 import utils
-from tools.toy import apis
-from tools.toy import utils
 
 
-def _transform(output, target, shape):
+def _transform(output, target, shape, balance=True):
     # output (Tensor[N, C, H, W]): type
     n, _, _, w = output.size()
     s = w / shape[-1]
@@ -27,7 +26,7 @@ def _transform(output, target, shape):
                                          output[i],
                                          target[i]["bboxes"],
                                          None,
-                                         True))
+                                         balance))
 
     return torch.stack(_target, 0).to(output.device)
 
@@ -58,7 +57,7 @@ def evaluate(model, data_loader, device, num_classes):
             _shape = output["input_shape"]
 
             _output = output["out"]
-            _target = _transform(_output, target, _shape)
+            _target = _transform(_output, target, _shape, False)
             confmat.update(_target.flatten(), _output.argmax(1).flatten())
 
         confmat.reduce_from_all_processes()
@@ -73,8 +72,10 @@ def test_one_epoch(model, data_loader, device, output_dir):
     header = "Test:"
     with torch.no_grad():
         for image, target in metric_logger.log_every(data_loader, 100, header):
-            output = model(image.to(device))
-            vals, inds = output["out"].max(dim=1)
+            output = model(image.to(device))["out"]
+            output = F.softmax(output, dim=1)
+
+            apis.simple_show(image[0], output[0, 0], target[0], output_dir)
 
 
 def train_one_epoch(model, optimizer, data_loader, lr_scheduler, device, epoch, print_freq):

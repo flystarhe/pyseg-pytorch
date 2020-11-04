@@ -4,11 +4,11 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler
 
 
-from pyseg.datasets.toy import Toy
+from pyseg.datasets.toy import ToyDataset
 
 
 # Supported datasets
-_DATASETS = {"toy": Toy}
+_DATASETS = {"toy": ToyDataset}
 
 # Default data directory (pyseg/datasets/data)
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")

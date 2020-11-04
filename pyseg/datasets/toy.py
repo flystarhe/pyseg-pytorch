@@ -77,7 +77,7 @@ class ToyDataset(Dataset):
             bboxes.append(ann["bbox"])
             labels.append(ann["label"])
 
-        image = cv.imread(os.path.join(self._data_path, filename))
+        image = cv.imread(os.path.join(self._data_path, filename), 1)
         image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
 
         if self._split == "train":
