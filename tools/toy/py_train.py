@@ -65,8 +65,9 @@ def evaluate(model, data_loader, device, num_classes):
     return confmat
 
 
-def test_one_epoch(model, data_loader, device, output_dir):
-    # draw box and save image, count boxes `box.max < thr`
+def test_one_epoch(model, data_loader, device, classes, output_dir):
+    mapping = {i: v for i, v in enumerate(classes)}
+
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = "Test:"
@@ -75,7 +76,7 @@ def test_one_epoch(model, data_loader, device, output_dir):
             output = model(image.to(device))["out"]
             output = F.softmax(output, dim=1)
 
-            apis.simple_show(image[0], output[0, 0], target[0], output_dir)
+            apis.simple_show(image[0], output[0, 0], target[0], output_dir, mapping)
 
 
 def train_one_epoch(model, optimizer, data_loader, lr_scheduler, device, epoch, print_freq):
@@ -126,7 +127,7 @@ def main(args):
         collate_fn=apis.collate_fn, drop_last=False)
 
     model = apis.get_model(backbone_name="resnet50", aux_loss=args.aux_loss, pretrained=args.pretrained)
-    num_classes = len(model.classes)
+    classes = model.classes
 
     model.to(device)
     if args.distributed:
@@ -140,7 +141,7 @@ def main(args):
     if args.test_only:
         checkpoint = torch.load(args.resume, map_location="cpu")
         model_without_ddp.load_state_dict(checkpoint["model"])
-        test_one_epoch(model, data_loader_test, device=device, output_dir=args.output_dir)
+        test_one_epoch(model, data_loader_test, device, classes, args.output_dir)
         return
 
     params_to_optimize = [
@@ -170,7 +171,7 @@ def main(args):
         if args.distributed:
             train_sampler.set_epoch(epoch)
         train_one_epoch(model, optimizer, data_loader, lr_scheduler, device, epoch, args.print_freq)
-        confmat = evaluate(model, data_loader_test, device=device, num_classes=num_classes)
+        confmat = evaluate(model, data_loader_test, device, len(classes))
         print(confmat)
         utils.save_on_master(
             {

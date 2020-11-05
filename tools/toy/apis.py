@@ -12,14 +12,15 @@ import torch
 
 
 def draw_bbox(img, bboxes, labels):
+    img = np.ascontiguousarray(img)
     for bbox, label in zip(bboxes, labels):
         x1, y1, x2, y2 = [int(val) for val in bbox]
-        cv.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), thickness=1)
+        cv.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), thickness=2)
         cv.putText(img, "{}".format(label), (x1, y1), cv.FONT_HERSHEY_COMPLEX, 1.0, (255, 0, 0))
     return img
 
 
-def simple_show(image, output, target, out_dir):
+def simple_show(image, output, target, out_dir, mapping):
     # image (Tensor[C, H, W]): type
     # output (Tensor[H, W]): type
     dtype, device = image.dtype, image.device
@@ -43,8 +44,12 @@ def simple_show(image, output, target, out_dir):
     bboxes = target["bboxes"]
     labels = target["labels"]
     filename = target["filename"]
-    draw_bbox(image, bboxes, labels)
-    draw_bbox(output, bboxes, labels)
+
+    labels = [mapping.get(label, "_FG") for label in labels]
+
+    image = draw_bbox(image, bboxes, labels)
+    output = draw_bbox(output, bboxes, labels)
+
     out_file = os.path.join(out_dir, filename)
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
 

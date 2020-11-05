@@ -27,8 +27,8 @@ def _points(feat, topk, x1, y1, x2, y2):
 
 
 def _balance_target(target, weight):
-    # target, weight (Tensor[H, W]): type
-    _, w = target.size()
+    # target, weight (Tensor[H, W] or Tensor[C, H, W]): type
+    w = target.size()[-1]
     negative_mask = target.eq(0)
     n_positive = target.gt(0).sum().item()
 
@@ -44,28 +44,109 @@ def _make_target(s, topk, feats, boxes, labels=None, balance=False):
     # feats (Tensor[K, H, W])： `0` means `_BG`, the C categories in `[1, K-1]`
     # labels (List[int]): where each value is `1 <= labels[i] <= C`
     # notes: assume `cross_entropy(ignore_index=-100)`
+    feats = F.softmax(feats, dim=0)
+
     if labels is None:
-        labels = [1 for _ in boxes]
+        indices = [1 for _ in boxes]
+    else:
+        indices = [label for label in labels]
 
     _, h, w = feats.size()
-    feats = F.softmax(feats, dim=0)
     masks = torch.zeros_like(feats, dtype=torch.uint8)
-    for (x1, y1, x2, y2), i in zip(boxes, labels):
+    for (x1, y1, x2, y2), i in zip(boxes, indices):
         x1 = int(np.floor(x1 * s))
         y1 = int(np.floor(y1 * s))
         x2 = int(np.ceil(x2 * s))
         y2 = int(np.ceil(y2 * s))
 
-        masks[i, y1:y2, x1:x2] = 2
+        x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w, x2), min(h, y2)
+
+        masks[i, y1:y2, x1:x2] = 2
         for cy, cx in _points(feats[i], topk, x1, y1, x2, y2):
             masks[i, cy, cx] = 1
 
     target = masks.argmax(0)
-    target[masks.sum(0) < 1] = 0
-    target[masks.sum(0) > 1] = -100
+
+    mask = masks.sum(0)
+    target[mask == 0] = 0
+    target[mask > 1] = -100
 
     if balance:
-        target = _balance_target(target, feats[0])
+        target = _balance_target(target, 1.0 - feats[0])
+
+    return target
+
+
+def cross_entropy_target(s, topk, feats, boxes, labels=None, balance=False):
+    # feats (Tensor[K, H, W])： `0` means `_BG`, the C categories in `[1, K-1]`
+    # labels (List[int]): where each value is `1 <= labels[i] <= C`
+    # notes: assume `cross_entropy(ignore_index=-100)`
+    # return (Tensor[H, W]): type
+    feats = F.softmax(feats, dim=0)
+
+    if labels is None:
+        indices = [1 for _ in boxes]
+    else:
+        indices = [label for label in labels]
+
+    _, h, w = feats.size()
+    masks = torch.zeros_like(feats, dtype=torch.uint8)
+    for (x1, y1, x2, y2), i in zip(boxes, indices):
+        x1 = int(np.floor(x1 * s))
+        y1 = int(np.floor(y1 * s))
+        x2 = int(np.ceil(x2 * s))
+        y2 = int(np.ceil(y2 * s))
+
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+
+        masks[i, y1:y2, x1:x2] = 2
+        for cy, cx in _points(feats[i], topk, x1, y1, x2, y2):
+            masks[i, cy, cx] = 1
+
+    target = masks.argmax(0)
+
+    mask = masks.sum(0)
+    target[mask == 0] = 0
+    target[mask > 1] = -100
+
+    if balance:
+        target = _balance_target(target, 1.0 - feats[0])
+
+    return target
+
+
+def binary_cross_entropy_target(s, topk, feats, boxes, labels=None, balance=False):
+    # feats (Tensor[C, H, W])：no channel `_BG`, the C categories in `[0, C-1]`
+    # labels (List[int]): where each value is `1 <= labels[i] <= C`
+    # notes: assume `cross_entropy(ignore_index=-100)`
+    # return (Tensor[C, H, W]): type
+    if labels is None:
+        indices = [1 for _ in boxes]
+    else:
+        indices = [label for label in labels]
+
+    _, h, w = feats.size()
+    masks = torch.zeros_like(feats, dtype=torch.uint8)
+    for (x1, y1, x2, y2), i in zip(boxes, indices):
+        x1 = int(np.floor(x1 * s))
+        y1 = int(np.floor(y1 * s))
+        x2 = int(np.ceil(x2 * s))
+        y2 = int(np.ceil(y2 * s))
+
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+
+        masks[i, y1:y2, x1:x2] = 2
+        for cy, cx in _points(feats[i], topk, x1, y1, x2, y2):
+            masks[i, cy, cx] = 1
+
+    target = masks.clone()
+
+    target[masks > 1] = -100
+
+    if balance:
+        target = _balance_target(target, feats)
 
     return target

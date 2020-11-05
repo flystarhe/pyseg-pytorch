@@ -37,12 +37,20 @@ class ToyDataset(Dataset):
 
         self.create_index()
 
-        self.transform = A.Compose([
-            A.SmallestMaxSize(max_size=512, p=1.0),
-            A.RandomCrop(height=256, width=256, p=1.0),
-            A.RandomBrightnessContrast(p=0.2),
-            A.HorizontalFlip(p=0.5),
-        ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=["labels"]))
+        if split == "train":
+            self.transform = A.Compose([
+                #A.Resize(height=1024, width=1024, interpolation=cv.INTER_LINEAR, p=1.0),
+                #A.LongestMaxSize(max_size=1024, interpolation=cv.INTER_LINEAR, p=1.0),
+                A.SmallestMaxSize(max_size=512, interpolation=cv.INTER_LINEAR, p=1.0),
+                A.RandomResizedCrop(height=480, width=480, scale=(0.08, 1.0), p=1.0),
+                #A.RandomCrop(height=256, width=256, p=1.0),
+                A.RandomBrightnessContrast(p=0.2),
+                A.HorizontalFlip(p=0.5),
+            ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=["labels"]))
+        else:
+            self.transform = A.Compose([
+                A.SmallestMaxSize(max_size=512, interpolation=cv.INTER_LINEAR, p=1.0),
+            ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=["labels"]))
 
         self.mean = [0.485, 0.456, 0.406]
         self.std = [0.229, 0.224, 0.225]
@@ -85,6 +93,11 @@ class ToyDataset(Dataset):
                 transformed = self.transform(image=image, bboxes=bboxes, labels=labels)
                 if len(bboxes) == 0 or len(transformed["bboxes"]) > 0:
                     break
+            image = transformed["image"]
+            bboxes = transformed["bboxes"]
+            labels = transformed["labels"]
+        else:
+            transformed = self.transform(image=image, bboxes=bboxes, labels=labels)
             image = transformed["image"]
             bboxes = transformed["bboxes"]
             labels = transformed["labels"]
