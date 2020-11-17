@@ -89,6 +89,7 @@ def cross_entropy_target(s, topk, feats, boxes, labels=None, balance=False):
         indices = [1 for _ in boxes]
     else:
         indices = [label for label in labels]
+    boxes = sorted(boxes, key=lambda x: (x[3] - x[1]) * (x[2] - x[0]), reverse=True)
 
     _, h, w = feats.size()
     masks = torch.zeros_like(feats, dtype=torch.uint8)
@@ -126,6 +127,7 @@ def binary_cross_entropy_target(s, topk, feats, boxes, labels=None, balance=Fals
         indices = [1 for _ in boxes]
     else:
         indices = [label for label in labels]
+    boxes = sorted(boxes, key=lambda x: (x[3] - x[1]) * (x[2] - x[0]), reverse=True)
 
     _, h, w = feats.size()
     masks = torch.zeros_like(feats, dtype=torch.uint8)
