@@ -1,3 +1,4 @@
+# https://github.com/github/gitignore
 tmp
 .vscode
 *.py[cod]
@@ -26,3 +27,9 @@ docs/_build/
 # Data directory
 data/*
 !data/readme.md
+
+# Outputs
+results
+
+# Git
+!.gitkeep
